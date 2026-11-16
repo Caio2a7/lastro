@@ -2,21 +2,24 @@
 
 **Integrantes:** Caio Daniel, Flawbert Costa, Murilo Costa e Rodrigo Ferreira.
 
-Implementação do analisador léxico (`src/lexer.l`) e sintático LALR (`src/parser.y`)
+Implementação do analisador léxico (`src/lexer/lexer.l`) e sintático LALR (`src/parser/parser.y`)
 da linguagem.
 
 ## Build
 
-    make        # gera lex.yy.c, y.tab.c/.h e o binário
+    make        # gera tudo em build/ (lex.yy.c, y.tab.c/.h, y.output e build/compilador)
     make test   # roda os casos em tests/valido e tests/invalido
-    make clean
+    make clean  # remove build/
 
 ## Estrutura
 
-- `src/lexer.l`   — especificação léxica
-- `src/parser.y`  — gramática BNF não ambígua
+- `src/lexer/lexer.l`    — especificação léxica
+- `src/parser/parser.y`  — gramática BNF não ambígua
+- `src/semantic/`        — tabela de símbolos (`symtab.c/.h`, ainda vazios)
+- `build/`               — artefatos gerados (ignorado pelo git)
 - `docs/`         — gramática e resumo das decisões anteriores
 - `tests/`        — programas de teste válidos e inválidos
+- `TASKS.md` — ordem de execução das tarefas (espelha as issues)
 
 ## Decisões que impactam o parser
 
@@ -42,4 +45,4 @@ da linguagem.
   qualquer conflito shift/reduce ou reduce/reduce.
 - **Limitações:** sem recuperação de erros (para no primeiro erro) e os lexemas
   copiados com `strdup` não são liberados.
-- Arquivos gerados (`lex.yy.c`, `y.tab.*`, `y.output`, binário) estão no `.gitignore`.
+- Arquivos gerados (`lex.yy.c`, `y.tab.*`, `y.output`, binário) ficam em `build/`, no `.gitignore`.

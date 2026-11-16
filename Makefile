@@ -1,19 +1,24 @@
 CC      = gcc
 LEX     = lex
 YACC    = yacc -d -v
-CFLAGS  = -Wall -Isrc -Iinclude
-TARGET  = compilador
+BUILD   = build
+CFLAGS  = -Wall -Isrc -I$(BUILD)
+TARGET  = $(BUILD)/compilador
+SRCS    = $(wildcard src/semantic/*.c src/gen/*.c)
 
 all: $(TARGET)
 
-$(TARGET): y.tab.c lex.yy.c
-	$(CC) $(CFLAGS) -o $(TARGET) y.tab.c lex.yy.c -lfl
+$(TARGET): $(BUILD)/y.tab.c $(BUILD)/lex.yy.c $(SRCS) | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $^ -lfl
 
-y.tab.c y.tab.h: src/parser.y
-	$(YACC) src/parser.y
+$(BUILD)/y.tab.c $(BUILD)/y.tab.h: src/parser/parser.y | $(BUILD)
+	$(YACC) -o $(BUILD)/y.tab.c $<
 
-lex.yy.c: src/lexer.l y.tab.h
-	$(LEX) src/lexer.l
+$(BUILD)/lex.yy.c: src/lexer/lexer.l $(BUILD)/y.tab.h | $(BUILD)
+	$(LEX) -o $@ $<
+
+$(BUILD):
+	mkdir -p $@
 
 test: all
 	@echo "== Casos válidos =="
@@ -23,10 +28,10 @@ test: all
 
 # Mostra o resumo de conflitos do y.output (gerado pelo -v do yacc),
 # útil para conferir contra as tabelas LR(0)/SLR/LR(1)/LALR(1) feitas à mão.
-conflitos: y.tab.c
-	@grep -i "conflict" y.output || echo "Nenhum conflito reportado."
+conflitos: $(BUILD)/y.tab.c
+	@grep -i "conflict" $(BUILD)/y.output || echo "Nenhum conflito reportado."
 
 clean:
-	rm -f y.tab.c y.tab.h y.output lex.yy.c $(TARGET)
+	rm -rf $(BUILD)
 
 .PHONY: all test conflitos clean
