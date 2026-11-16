@@ -1,48 +1,85 @@
-# Problema 7 — DIM0548 Engenharia de Linguagens — Grupo 2
+# Lastro
 
-**Integrantes:** Caio Daniel, Flawbert Costa, Murilo Costa e Rodrigo Ferreira.
+Compilador da linguagem **Lastro**, desenvolvido na disciplina DIM0548 – Engenharia de Linguagens (UFRN/DIMAp). O compilador lê um programa Lastro e o traduz para C; o `gcc` transforma esse C em executável.
 
-Implementação do analisador léxico (`src/lexer/lexer.l`) e sintático LALR (`src/parser/parser.y`)
-da linguagem.
+**Grupo 2:** Caio Daniel, Flawbert Costa, Murilo Costa e Rodrigo Ferreira.
 
-## Build
+## A linguagem
 
-    make        # gera tudo em build/ (lex.yy.c, y.tab.c/.h, y.output e build/compilador)
-    make test   # roda os casos em tests/valido e tests/invalido
-    make clean  # remove build/
+Lastro é uma linguagem imperativa, com tipagem estática e subprogramas com passagem de parâmetro por valor ou de saída (`out`).
+
+```
+const int MAX := 1000;
+
+func juros(int principal, int taxa_bp, int dias) -> int {
+    return (principal * taxa_bp * dias) / (10000 * 360);
+}
+
+proc main() {
+    int[MAX] v := [0; MAX];
+    int total := 0;
+    for (int i := 0 to MAX - 1) {
+        total := total + juros(100000, 250, i);
+    }
+    escrever(total);
+}
+```
+
+- **Tipos:** `int`, `bool` e arrays de tamanho fixo (`int[MAX]`), inicializados com `[valor; tamanho]`.
+- **Constantes globais:** `const int MAX := 1000;`
+- **Subprogramas:** `proc` (sem retorno) e `func ... -> tipo`. Parâmetros `out` são alterados pelo subprograma chamado e marcados também na chamada: `ler(out n)`.
+- **Comandos:** declaração com inicialização obrigatória, atribuição, chamada, `if` / `else if` / `else`, `while`, `for (int i := a to b)`, `break`, `continue` e `return`.
+- **Comentários:** `//` até o fim da linha.
+
+### Decisões de projeto
+
+- **Atribuição é `:=`** e só existe como comando, nunca dentro de expressão; `=` é a igualdade.
+- **Chaves obrigatórias** em `if`, `while` e `for`, o que elimina o *dangling else* por construção.
+- **Precedência por níveis da gramática**, sem `%left`/`%right`: os operadores binários associam à esquerda e os relacionais não se encadeiam.
+
+| Precedência (menor → maior) | Operadores |
+|---|---|
+| 1 | `\|\|` |
+| 2 | `&&` |
+| 3 | `=` `!=` `<` `<=` `>` `>=` |
+| 4 | `+` `-` |
+| 5 | `*` `/` |
+| 6 | `-` unário, `!` |
+
+## Como o compilador funciona
+
+```
+programa.lastro → analisador léxico → analisador sintático → análise semântica → geração de C → gcc → executável
+                  (flex: lexer.l)     (bison: parser.y)       (src/semantic)      (src/gen)
+```
+
+1. **Análise léxica (lexical analysis):** `src/lexer/lexer.l` vira a função `yylex()`, que transforma caracteres em tokens.
+2. **Análise sintática (parsing):** `src/parser/parser.y` vira a função `yyparse()`, um parser LALR(1) que pede um token por vez ao léxico e confere a estrutura do programa contra a gramática.
+3. **Análise semântica (semantic analysis) e geração de código (code generation):** acontecem nas ações semânticas do `parser.y`, numa única passada. Elas usam a tabela de símbolos e a pilha de escopos de `src/semantic/` e montam o código C em `src/gen/`.
+4. **gcc:** compila o C gerado em executável.
+
+## Uso
+
+Requisitos: `gcc`, `flex` e `bison` (chamado como `yacc`), e `make`.
+
+```sh
+make                                  # gera build/compilador
+./build/compilador < programa.txt     # analisa um programa
+make test                             # roda os programas de tests/valido e tests/invalido
+make conflitos                        # resume os conflitos do autômato LALR (build/y.output)
+make clean                            # remove build/
+```
+
+Erros são reportados com a linha e o token onde foram detectados, por exemplo `linha 2: syntax error perto de '='`. O código de saída é 0 quando o programa é aceito e 1 quando há erro.
 
 ## Estrutura
 
-- `src/lexer/lexer.l`    — especificação léxica
-- `src/parser/parser.y`  — gramática BNF não ambígua
-- `src/semantic/`        — tabela de símbolos (`symtab.c/.h`, ainda vazios)
-- `build/`               — artefatos gerados (ignorado pelo git)
-- `docs/`         — gramática e resumo das decisões anteriores
-- `tests/`        — programas de teste válidos e inválidos
-- `TASKS.md` — ordem de execução das tarefas (espelha as issues)
-
-## Decisões que impactam o parser
-
-- Atribuição é `:=` e só existe como comando (nunca dentro de expressão).
-- `=` é operador relacional (igualdade), não atribuição.
-- Chaves `{ }` obrigatórias em if/while/for — elimina dangling-else por construção.
-- Gramática já desambiguada por níveis de não-terminal (expr/conj/rel/soma/termo/fator)
-  com recursão à esquerda — operadores binários associam à esquerda sem precisar de
-  `%left`/`%right` no yacc.
-- Só existem literais inteiros (sem ponto flutuante).
-
-## Detalhes e escolhas de implementação
-
-- **Erro léxico rejeita a entrada:** caractere inválido faz o lexer devolver o token
-  `ERRO`, que não aparece em nenhuma produção. Sem isso, o parser poderia aceitar um
-  programa depois de um erro léxico. Por isso um erro léxico gera duas mensagens
-  (`caractere inválido` e `syntax error`).
-- **Mensagens de erro:** `%option yylineno` permite informar a linha e o token onde o
-  erro foi detectado. No fim da entrada o token aparece vazio (`perto de ''`).
-- **Aceitação:** o yacc adiciona a regra aumentada `S' → S $end`, então `yyparse()` só
-  retorna 0 se toda a entrada foi consumida. A `main` apenas imprime `ACEITO` ou `REJEITADO`.
-- **Conflitos:** o yacc roda com `-d -v`; o `y.output` mostra os estados do autômato e
-  qualquer conflito shift/reduce ou reduce/reduce.
-- **Limitações:** sem recuperação de erros (para no primeiro erro) e os lexemas
-  copiados com `strdup` não são liberados.
-- Arquivos gerados (`lex.yy.c`, `y.tab.*`, `y.output`, binário) ficam em `build/`, no `.gitignore`.
+| Caminho | Conteúdo |
+|---|---|
+| `src/lexer/` | especificação léxica (flex) |
+| `src/parser/` | gramática e ações semânticas (bison) |
+| `src/semantic/` | tabela de símbolos e pilha de escopos |
+| `tests/valido/`, `tests/invalido/` | programas de teste |
+| `docs/` | gramática, documentação e enunciados dos problemas da disciplina |
+| `build/` | arquivos gerados pelo `make` (ignorado pelo git) |
+| `TASKS.md` | tarefas do compilador, ligadas às issues do repositório |
