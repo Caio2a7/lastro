@@ -1,6 +1,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include "semantic/semantico.h"
 
 int yylex(void);
 int yyerror(char *s);
@@ -9,21 +10,24 @@ extern char *yytext;
 
 #include "semantic/symtab.h"
 
-static int semantic_errors;
 static Symbol *current_sub;
 
 static Symbol *declare(const char *name, Category category, Type type, int is_out);
-static void use(const char *name);
+static Symbol *use(const char *name);
 %}
 
 %union {
     char *str;
     Type type;
+    Atr atr;   /* atributo sintetizado das expressões: (texto C, tipo, linha) */
 }
 
 %type <type> tipo tipo_prim
 
 %token <str> ID LITERAL_INT
+
+%type <atr> expr conj rel soma termo fator literal alvo chamada
+%type <str> op_rel args arg
 
 %token CONST PROC FUNC INT BOOL IF ELSE WHILE FOR TO
 %token SWITCH CASE DEFAULT BREAK CONTINUE RETURN OUT TRUE FALSE
@@ -169,23 +173,36 @@ atrib
     ;
 
 alvo
-    : ID                            { use($1); }
-    | ID LBRACKET expr RBRACKET     { use($1); }
+    /* tipo vem da tabela de símbolos; não declarado => T_ERRO (erro já reportado por use) */
+    : ID    {
+            Symbol *s = use($1);
+            $$ = atr($1, s ? s->type : T_ERRO, yylineno);
+        }
+    | ID LBRACKET expr RBRACKET {
+            Symbol *s = use($1);
+            $$ = atr(cod_fmt("%s[%s]", $1, $3.cod), s ? s->type : T_ERRO, yylineno);
+        }
     ;
 
 chamada
-    : ID LPAREN RPAREN          { use($1); }
-    | ID LPAREN args RPAREN     { use($1); }
+    : ID LPAREN RPAREN {
+            Symbol *s = use($1);
+            $$ = atr(cod_fmt("%s()", $1), s ? s->type : T_ERRO, yylineno);
+        }
+    | ID LPAREN args RPAREN {
+            Symbol *s = use($1);
+            $$ = atr(cod_fmt("%s(%s)", $1, $3), s ? s->type : T_ERRO, yylineno);
+        }
     ;
 
 args
     : arg
-    | arg COMMA args
+    | arg COMMA args  { $$ = cod_fmt("%s, %s", $1, $3); }
     ;
 
 arg
-    : expr
-    | OUT alvo
+    : expr     { $$ = $1.cod; }
+    | OUT alvo { $$ = cod_fmt("&%s", $2.cod); }  /* out = passagem por referência: ponteiro no C */
     ;
 
 if_stmt
@@ -207,38 +224,38 @@ for_stmt
     ;
 
 expr
-    : expr OR conj
+    : expr OR conj  { $$ = atr_bin($1, "||", $3, OP_LOGICO); }
     | conj
     ;
 
 conj
-    : conj AND rel
+    : conj AND rel  { $$ = atr_bin($1, "&&", $3, OP_LOGICO); }
     | rel
     ;
 
 rel
-    : soma op_rel soma
+    : soma op_rel soma  { $$ = atr_bin($1, $2, $3, OP_RELACIONAL); }
     | soma
     ;
 
 op_rel
-    : EQ
-    | NEQ
-    | LT
-    | LE
-    | GT
-    | GE
+    : EQ   { $$ = "=="; }  /* Lastro usa '=' para igualdade; C usa '==' */
+    | NEQ  { $$ = "!="; }
+    | LT   { $$ = "<"; }
+    | LE   { $$ = "<="; }
+    | GT   { $$ = ">"; }
+    | GE   { $$ = ">="; }
     ;
 
 soma
-    : soma PLUS termo
-    | soma MINUS termo
+    : soma PLUS termo   { $$ = atr_bin($1, "+", $3, OP_ARITMETICO); }
+    | soma MINUS termo  { $$ = atr_bin($1, "-", $3, OP_ARITMETICO); }
     | termo
     ;
 
 termo
-    : termo STAR fator
-    | termo SLASH fator
+    : termo STAR fator   { $$ = atr_bin($1, "*", $3, OP_ARITMETICO); }
+    | termo SLASH fator  { $$ = atr_bin($1, "/", $3, OP_ARITMETICO); }
     | fator
     ;
 
@@ -246,15 +263,15 @@ fator
     : literal
     | alvo
     | chamada
-    | LPAREN expr RPAREN
-    | MINUS fator
-    | NOT fator
+    | LPAREN expr RPAREN  { $$ = atr(cod_fmt("(%s)", $2.cod), $2.tipo, $2.linha); }
+    | MINUS fator         { $$ = atr_un("-", $2, OP_ARITMETICO); }
+    | NOT fator           { $$ = atr_un("!", $2, OP_LOGICO); }
     ;
 
 literal
-    : LITERAL_INT
-    | TRUE
-    | FALSE
+    : LITERAL_INT  { $$ = atr($1, T_INT, yylineno); }
+    | TRUE         { $$ = atr(cod_fmt("1"), T_BOOL, yylineno); }  /* bool vira int no C */
+    | FALSE        { $$ = atr(cod_fmt("0"), T_BOOL, yylineno); }
     ;
 
 %%
@@ -266,17 +283,18 @@ static Symbol *declare(const char *name, Category category, Type type, int is_ou
     Symbol *sym = table_insert(top->name, name, data);
 
     if (!sym) {
-        fprintf(stderr, "Linha %d: '%s' já declarado no escopo '%s'\n", yylineno, name, top->name);
-        semantic_errors++;
+        erro_semantico(yylineno, "'%s' já declarado no escopo '%s'", name, top->name);
     }
     return sym;
 }
 
-static void use(const char *name) {
-    if (!find_name(name)) {
-        fprintf(stderr, "Linha %d: '%s' não declarado\n", yylineno, name);
-        semantic_errors++;
+/* Busca o nome na tabela; NULL (com erro reportado) se não declarado. */
+static Symbol *use(const char *name) {
+    Symbol *sym = find_name(name);
+    if (!sym) {
+        erro_semantico(yylineno, "'%s' não declarado", name);
     }
+    return sym;
 }
 
 int main(void) {
@@ -289,12 +307,16 @@ int main(void) {
 
     table_print();
 
-    if (status == 0 && semantic_errors == 0) {
+    int erros = erros_semanticos();
+    if (status == 0 && erros == 0) {
         printf("ACEITO: programa correto\n");
-    } else {
-        printf("REJEITADO: programa contém erro\n");
+        return 0;
     }
-    return status != 0 || semantic_errors != 0;
+    if (erros > 0) {
+        fprintf(stderr, "%d erro(s) semântico(s)\n", erros);
+    }
+    printf("REJEITADO: programa contém erro\n");
+    return 1;
 }
 
 int yyerror(char *msg) {

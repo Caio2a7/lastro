@@ -1,7 +1,7 @@
 %{
   #include <stdio.h>
   #include <string.h>
-  #include "semantic/symtab.h"
+  #include "semantic/semantico.h"
   #include "y.tab.h"
 
   extern int yyerror(char *msg);
