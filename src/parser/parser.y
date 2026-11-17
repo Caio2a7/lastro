@@ -1,11 +1,13 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int yylex(void);
 int yyerror(char *s);
 extern int yylineno;
 extern char *yytext;
+extern int yydebug;
 %}
 
 %union {
@@ -207,7 +209,10 @@ literal
 
 %%
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "-t") == 0) {
+        yydebug = 1;
+    }
     int status = yyparse();
     if (status == 0) {
         printf("ACEITO: programa sintaticamente correto\n");
