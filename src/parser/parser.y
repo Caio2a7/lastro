@@ -6,11 +6,19 @@ int yylex(void);
 int yyerror(char *s);
 extern int yylineno;
 extern char *yytext;
+
+#inclued "semantic/symtab.h"
+
+static int semantic_errors;
+static Symbol *current_sub;
 %}
 
 %union {
     char *str;
+    Type type;
 }
+
+%type <type> tipo tipo_prim
 
 %token <str> ID LITERAL_INT
 
@@ -39,7 +47,7 @@ consts
     ;
 
 decl_const
-    : CONST tipo_prim ID ASSIGN literal SEMI
+    : CONST tipo_prim ID ASSIGN literal SEMI { declare($3, C_CONST, $2, 0); }
     ;
 
 subprogs
@@ -63,18 +71,18 @@ params
     ;
 
 param
-    : tipo ID
-    | OUT tipo ID
+    : tipo ID       {declare($2, C_PARAM, $1, 0); }
+    | OUT tipo ID   {declare($3, C_PARAM, $2, 0); }
     ;
 
 tipo
-    : tipo_prim
-    | tipo_prim LBRACKET tamanho RBRACKET
+    : tipo_prim                             { $$ = $1; }
+    | tipo_prim LBRACKET tamanho RBRACKET   { $$ = $1; }
     ;
 
 tipo_prim
-    : INT
-    | BOOL
+    : INT   { $$ = T_INT; }
+    | BOOL  { $$ = T_BOOL; }
     ;
 
 tamanho
@@ -106,7 +114,7 @@ cmd
     ;
 
 decl_var
-    : tipo ID ASSIGN inicial SEMI
+    : tipo ID ASSIGN inicial SEMI   { declare($2, C_VAR, $1, 0); }
     ;
 
 inicial
@@ -204,6 +212,26 @@ literal
     ;
 
 %%
+
+static Symbol *declare(const char *name, Category category, Type type, int is_out) {
+    Scope *top = scope_level(scope_depth());
+    Symbol data = { .category = category, .type = type, .is_out = is_out, .line = yylineno };
+
+    Symbol *sym = table_insert(top->name, name, data);
+
+    if (!sym) {
+        fprintf(stderr, "Linha %d: '%s' já declarado no escopo '%s'\n", yylineno, name, top->name);
+        semantic_errors++;
+    }
+    return sym;
+}
+
+static void use(const char *name) {
+    if (!find_name(name)) {
+        fprintf(stderr, "Linha %d: '%s' não declarado\n", yylineno, name);
+        sem_errors++;
+    }
+}
 
 int main(void) {
     int status = yyparse();
