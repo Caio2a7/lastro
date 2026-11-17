@@ -45,7 +45,7 @@ void scope_push(const char *name, Type type_return, int is_loop);
 void scope_push_block(int is_loop);
 
 /**
- * @brief Remove o último escopo da pilha de escopos; Não altera a pilha.
+ * @brief Remove o último escopo da pilha de escopos; Não altera a tabela.
  * @return Null
  */
 void scope_pop(); 

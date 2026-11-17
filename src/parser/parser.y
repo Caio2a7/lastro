@@ -7,10 +7,13 @@ int yyerror(char *s);
 extern int yylineno;
 extern char *yytext;
 
-#inclued "semantic/symtab.h"
+#include "semantic/symtab.h"
 
 static int semantic_errors;
 static Symbol *current_sub;
+
+static Symbol *declare(const char *name, Category category, Type type, int is_out)
+static void use(const char *name)
 %}
 
 %union {
@@ -56,13 +59,28 @@ subprogs
     ;
 
 subprog
-    : PROC assinatura bloco
-    | FUNC assinatura ARROW tipo bloco
+    : PROC assinatura bloco             { scope_pop(); }        
+    | FUNC assinatura ARROW tipo        {
+            if (current_sub) {
+                current_sub->category = C_FUNC;
+                current_sub->type = $4;
+            }
+            scope_level(scope_depth())->type_return = $4;
+        } 
+        bloco                           { scope_pop(); }
     ;
 
 assinatura
-    : ID LPAREN RPAREN
-    | ID LPAREN params RPAREN
+    : nome_sub LPAREN RPAREN
+    | nome_sub LPAREN params RPAREN
+    ;
+
+nome_sub
+    : ID
+        {
+            current_sub = declare($1, C_PROC, T_VOID, 0);
+            scope_push(%1, T_VOID, 0);
+        }
     ;
 
 params
@@ -72,7 +90,7 @@ params
 
 param
     : tipo ID       {declare($2, C_PARAM, $1, 0); }
-    | OUT tipo ID   {declare($3, C_PARAM, $2, 0); }
+    | OUT tipo ID   {declare($3, C_PARAM, $2, 1); }
     ;
 
 tipo
@@ -86,7 +104,7 @@ tipo_prim
     ;
 
 tamanho
-    : ID
+    : ID            { use($1); }
     | LITERAL_INT
     ;
 
@@ -127,13 +145,13 @@ atrib
     ;
 
 alvo
-    : ID
-    | ID LBRACKET expr RBRACKET
+    : ID                            { use($1); }
+    | ID LBRACKET expr RBRACKET     { use($1); }
     ;
 
 chamada
-    : ID LPAREN RPAREN
-    | ID LPAREN args RPAREN
+    : ID LPAREN RPAREN          { use($1); }
+    | ID LPAREN args RPAREN     { use($1); }
     ;
 
 args
@@ -157,7 +175,11 @@ while_stmt
     ;
 
 for_stmt
-    : FOR LPAREN INT ID ASSIGN expr TO expr RPAREN bloco
+    : FOR LPAREN INT ID ASSIGN expr TO expr RPAREN  {
+            scope_push_block(1);
+            declare($4, C_VAR, T_INT, 0);
+        } 
+        bloco                                       { scope_pop(); }
     ;
 
 expr
@@ -229,18 +251,26 @@ static Symbol *declare(const char *name, Category category, Type type, int is_ou
 static void use(const char *name) {
     if (!find_name(name)) {
         fprintf(stderr, "Linha %d: '%s' não declarado\n", yylineno, name);
-        sem_errors++;
+        semantic_errors++;
     }
 }
 
 int main(void) {
+    scope_push("global", T_VOID, 0);
+    declare("ler", C_PROC, T_VOID, 0);
+    declare("escrever", C_PROC, T_VOID, 0);
+
     int status = yyparse();
-    if (status == 0) {
-        printf("ACEITO: programa sintaticamente correto\n");
+    scope_pop();
+
+    table_print();
+
+    if (status == 0 && semantic_errors == 0) {
+        printf("ACEITO: programa correto\n");
     } else {
         printf("REJEITADO: programa contém erro\n");
     }
-    return status;
+    return status != 0 || semantic_errors != 0;
 }
 
 int yyerror(char *msg) {
