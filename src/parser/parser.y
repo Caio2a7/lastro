@@ -12,8 +12,8 @@ extern char *yytext;
 static int semantic_errors;
 static Symbol *current_sub;
 
-static Symbol *declare(const char *name, Category category, Type type, int is_out)
-static void use(const char *name)
+static Symbol *declare(const char *name, Category category, Type type, int is_out);
+static void use(const char *name);
 %}
 
 %union {
@@ -59,7 +59,7 @@ subprogs
     ;
 
 subprog
-    : PROC assinatura bloco             { scope_pop(); }        
+    : PROC assinatura corpo             { scope_pop(); }        
     | FUNC assinatura ARROW tipo        {
             if (current_sub) {
                 current_sub->category = C_FUNC;
@@ -67,7 +67,7 @@ subprog
             }
             scope_level(scope_depth())->type_return = $4;
         } 
-        bloco                           { scope_pop(); }
+        corpo                           { scope_pop(); }
     ;
 
 assinatura
@@ -79,7 +79,7 @@ nome_sub
     : ID
         {
             current_sub = declare($1, C_PROC, T_VOID, 0);
-            scope_push(%1, T_VOID, 0);
+            scope_push($1, T_VOID, 0);
         }
     ;
 
@@ -108,9 +108,33 @@ tamanho
     | LITERAL_INT
     ;
 
-bloco
+/* Corpo de subprograma e de for: o escopo já foi aberto antes. */
+corpo
     : LBRACE RBRACE
     | LBRACE cmds RBRACE
+    ;
+
+/* Bloco de if/else: abre um escopo próprio. */
+bloco
+    : abre_bloco fecha_bloco
+    ;
+
+/* Bloco de while: escopo próprio, marcado como laço. */
+bloco_laco
+    : abre_laco fecha_bloco
+    ;
+
+abre_bloco
+    : LBRACE        { scope_push_block(0); }
+    ;
+
+abre_laco
+    : LBRACE        { scope_push_block(1); }
+    ;
+
+fecha_bloco
+    : RBRACE        { scope_pop(); }
+    | cmds RBRACE   { scope_pop(); }
     ;
 
 cmds
@@ -171,7 +195,7 @@ if_stmt
     ;
 
 while_stmt
-    : WHILE LPAREN expr RPAREN bloco
+    : WHILE LPAREN expr RPAREN bloco_laco
     ;
 
 for_stmt
@@ -179,7 +203,7 @@ for_stmt
             scope_push_block(1);
             declare($4, C_VAR, T_INT, 0);
         } 
-        bloco                                       { scope_pop(); }
+        corpo                                       { scope_pop(); }
     ;
 
 expr
