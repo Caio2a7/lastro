@@ -1,6 +1,6 @@
 CC      = gcc
 LEX     = lex
-YACC    = yacc -d -v
+YACC    = yacc -d -v -t
 BUILD   = build
 CFLAGS  = -Wall -Isrc -I$(BUILD)
 TARGET  = $(BUILD)/compilador

@@ -65,6 +65,7 @@ Requisitos: `gcc`, `flex` e `bison` (chamado como `yacc`), e `make`.
 ```sh
 make                                  # gera build/compilador
 ./build/compilador < programa.txt     # analisa um programa
+./build/compilador -t < programa.txt  # analisa exibindo o trace da derivação (shift/reduce)
 make test                             # roda os programas de tests/valido e tests/invalido
 make conflitos                        # resume os conflitos do autômato LALR (build/y.output)
 make clean                            # remove build/

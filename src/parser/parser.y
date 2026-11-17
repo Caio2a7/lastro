@@ -1,12 +1,14 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "semantic/semantico.h"
 
 int yylex(void);
 int yyerror(char *s);
 extern int yylineno;
 extern char *yytext;
+extern int yydebug;
 
 #include "semantic/symtab.h"
 
@@ -299,7 +301,11 @@ static Symbol *use(const char *name) {
     return sym;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "-t") == 0) {
+        yydebug = 1;
+    }
+
     scope_push("global", T_VOID, 0);
     declare("ler", C_PROC, T_VOID, 0);
     declare("escrever", C_PROC, T_VOID, 0);
