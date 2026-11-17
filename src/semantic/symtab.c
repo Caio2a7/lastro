@@ -128,7 +128,7 @@ void scope_push_block(int is_loop) {
  * @return Null
  */
 void scope_pop() {
-    if (depth >= 0) {
+    if (depth <= 0) {
         fprintf(stderr, "Erro interno: tentativa de desempilhar escopo vazio ou inexistente.\n");
         exit(EXIT_FAILURE);
     }
