@@ -12,7 +12,7 @@ typedef enum { T_INT, T_FLOAT, T_BOOL, T_VOID, T_ERRO } Type;
 typedef enum { C_VAR, C_CONST, C_PARAM, C_PROC, C_FUNC, C_TYPE } Category;
 
 
-typedef struct {
+typedef struct Symbol {
     char *key; // Chave do símbolo (nome#escopo)
     char *name, *scope;
     Category category;
@@ -29,7 +29,6 @@ typedef struct {
     Type type_return;
     int is_loop;
 } Scope;
-
 
 /**
  * @brief Adiciona um novo escopo à pilha de escopos.
