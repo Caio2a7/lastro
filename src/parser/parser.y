@@ -23,6 +23,8 @@ extern char *yytext;
 
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMI DOT
+/* devolvido pelo léxico para caractere inválido; não aparece em nenhuma produção */
+%token ERRO
 
 %start programa
 

@@ -67,7 +67,7 @@ ident    {letra}({letra}|{digito}|_)*
 {digito}+     { yylval.str = strdup(yytext); return LITERAL_INT; }
 {ident}       { yylval.str = strdup(yytext); return ID; }
 
-.             { yyerror("caractere inválido"); }
+.             { yyerror("caractere inválido"); return ERRO; }
 
 %%
 
