@@ -4,8 +4,6 @@ Ordem de execução do compilador, da mais urgente para a menos urgente. Cada ta
 
 **Critério:** código do que a tarefa atende; a legenda está no fim do arquivo.
 
-> **Antes de tudo:** [#1 Decisões pendentes](https://github.com/Caio2a7/lastro/issues/1) reúne as dúvidas para o professor e o grupo (tipagem dinâmica, tipos sintéticos, `to` inclusivo, `ler`/`escrever` embutidos). As respostas podem mudar as tarefas abaixo.
-
 ## Prioridade máxima
 
 Sequência que destrava todo o resto. Fazer agora, nesta ordem.
