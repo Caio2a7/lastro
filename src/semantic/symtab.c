@@ -176,7 +176,7 @@ void table_print(void) {
     static const char *type[] = {"int", "float", "bool", "void", "erro"};
 
     printf("Tabela de Símbolos:\n");
-    printf("%-24s %-6s %6s %5s %3s $5s\n", "Chave", "Categ", "Tipo", "Tam", "Out", "Linha");
+    printf("%-24s %-6s %6s %5s %3s %5s\n", "Chave", "Categ", "Tipo", "Tam", "Out", "Linha");
     printf("--------------------------------------------------------------------------------\n");
     for (int index = 0; index < BUCKETS; index++) {
         for (Symbol *sym = table[index]; sym; sym = sym->next) {
