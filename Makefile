@@ -25,6 +25,13 @@ test: all
 	@for f in tests/valido/*.txt; do echo "-- $$f --"; ./$(TARGET) < $$f; echo; done
 	@echo "== Casos inválidos (devem dar erro) =="
 	@for f in tests/invalido/*.txt; do echo "-- $$f --"; ./$(TARGET) < $$f; echo; done
+	@echo "== Casos semânticos inválidos (devem dar erro) =="
+	@for f in tests/semantic/invalido/*.txt; do echo "-- $$f --"; ./$(TARGET) < $$f; echo; done
+
+# Teste em C das tabelas e da pilha de escopos (issues #5 e #6).
+test-tabelas: | $(BUILD)
+	$(CC) $(CFLAGS) -o $(BUILD)/tabelas_test tests/tabelas_test.c $(SRCS)
+	./$(BUILD)/tabelas_test
 
 # Mostra o resumo de conflitos do y.output (gerado pelo -v do yacc),
 # útil para conferir contra as tabelas LR(0)/SLR/LR(1)/LALR(1) feitas à mão.
@@ -34,4 +41,4 @@ conflitos: $(BUILD)/y.tab.c
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test conflitos clean
+.PHONY: all test test-tabelas conflitos clean

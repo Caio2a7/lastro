@@ -10,23 +10,22 @@ extern int yylineno;
 extern char *yytext;
 extern int yydebug;
 
-#include "semantic/symtab.h"
-
-static Symbol *current_sub;
-
-static Symbol *declare(const char *name, Category category, Type type, int is_out);
-static Symbol *use(const char *name);
+static Subprog *current_sub;  /* subprograma cuja assinatura/corpo está sendo analisado */
 %}
 
 %union {
     char *str;
-    Type type;
+    int num;
+    TypeDesc *type;
     Atr atr;   /* atributo sintetizado das expressões: (texto C, tipo, linha) */
 }
 
-%type <type> tipo tipo_prim
+%type <type> tipo tipo_base tipo_prim
+%type <num> tamanho
 
 %token <str> ID LITERAL_INT
+/* nome que está na tabela de tipos; o léxico decide entre ID e TYPE_ID */
+%token <str> TYPE_ID
 
 %type <atr> expr conj rel soma termo fator literal alvo chamada
 %type <str> op_rel args arg
@@ -58,7 +57,10 @@ consts
     ;
 
 decl_const
-    : CONST tipo_prim ID ASSIGN literal SEMI { declare($3, C_CONST, $2, 0); }
+    : CONST tipo_prim ID ASSIGN literal SEMI {
+            Symbol *s = declare_var($3, C_CONST, $2, 0, yylineno);
+            if (s) s->value = strtol($5.cod, NULL, 10);  /* usado em int[MAX] */
+        }
     ;
 
 subprogs
@@ -69,12 +71,11 @@ subprogs
 subprog
     : PROC assinatura corpo             { scope_pop(); }        
     | FUNC assinatura ARROW tipo        {
-            if (current_sub) {
-                current_sub->category = C_FUNC;
-                current_sub->type = $4;
+            if (current_sub) {  /* o escopo aponta para current_sub, então o return já enxerga o tipo */
+                current_sub->is_func = 1;
+                current_sub->ret = $4;
             }
-            scope_level(scope_depth())->type_return = $4;
-        } 
+        }
         corpo                           { scope_pop(); }
     ;
 
@@ -86,8 +87,8 @@ assinatura
 nome_sub
     : ID
         {
-            current_sub = declare($1, C_PROC, T_VOID, 0);
-            scope_push($1, T_VOID, 0);
+            current_sub = declare_sub($1, yylineno);  /* antes do corpo: permite recursão */
+            scope_push($1, current_sub, 0);
         }
     ;
 
@@ -97,23 +98,41 @@ params
     ;
 
 param
-    : tipo ID       {declare($2, C_PARAM, $1, 0); }
-    | OUT tipo ID   {declare($3, C_PARAM, $2, 1); }
+    : tipo ID       { append_param(current_sub, declare_var($2, C_PARAM, $1, 0, yylineno)); }
+    | OUT tipo ID   { append_param(current_sub, declare_var($3, C_PARAM, $2, 1, yylineno)); }
     ;
 
 tipo
-    : tipo_prim                             { $$ = $1; }
-    | tipo_prim LBRACKET tamanho RBRACKET   { $$ = $1; }
+    : tipo_base                             { $$ = $1; }
+    | tipo_base LBRACKET tamanho RBRACKET   { $$ = type_array($1, $3); }
+    ;
+
+tipo_base
+    : tipo_prim     { $$ = $1; }
+    | TYPE_ID       { $$ = type_lookup($1); }  /* tipo do usuário (#19) */
     ;
 
 tipo_prim
-    : INT   { $$ = T_INT; }
-    | BOOL  { $$ = T_BOOL; }
+    : INT   { $$ = &type_int; }
+    | BOOL  { $$ = &type_bool; }
     ;
 
+/* tamanho de array: literal ou const int, sempre > 0 */
 tamanho
-    : ID            { use($1); }
-    | LITERAL_INT
+    : ID {
+            Symbol *s = use_var($1, yylineno);
+            $$ = 0;
+            if (s && (s->category != C_CONST || s->type != &type_int))
+                erro_semantico(yylineno, "tamanho '%s' não é const int", $1);
+            else if (s && s->value <= 0)
+                erro_semantico(yylineno, "tamanho '%s' tem de ser > 0", $1);
+            else if (s)
+                $$ = (int)s->value;
+        }
+    | LITERAL_INT {
+            $$ = atoi($1);
+            if ($$ <= 0) erro_semantico(yylineno, "tamanho do array tem de ser > 0");
+        }
     ;
 
 /* Corpo de subprograma e de for: o escopo já foi aberto antes. */
@@ -164,7 +183,7 @@ cmd
     ;
 
 decl_var
-    : tipo ID ASSIGN inicial SEMI   { declare($2, C_VAR, $1, 0); }
+    : tipo ID ASSIGN inicial SEMI   { declare_var($2, C_VAR, $1, 0, yylineno); }
     ;
 
 inicial
@@ -177,25 +196,28 @@ atrib
     ;
 
 alvo
-    /* tipo vem da tabela de símbolos; não declarado => T_ERRO (erro já reportado por use) */
+    /* tipo vem da tabela de símbolos; não declarado => type_erro (erro já reportado por use_var) */
     : ID    {
-            Symbol *s = use($1);
-            $$ = atr($1, s ? s->type : T_ERRO, yylineno);
+            Symbol *s = use_var($1, yylineno);
+            $$ = atr($1, s ? s->type : &type_erro, yylineno);
         }
     | ID LBRACKET expr RBRACKET {
-            Symbol *s = use($1);
-            $$ = atr(cod_fmt("%s[%s]", $1, $3.cod), s ? s->type : T_ERRO, yylineno);
+            Symbol *s = use_var($1, yylineno);
+            TypeDesc *t = s ? s->type : &type_erro;
+            /* v[i] tem o tipo do elemento; acusar indexação de não-array é da #10 */
+            $$ = atr(cod_fmt("%s[%s]", $1, $3.cod), t->kind == K_ARRAY ? t->elem : t, yylineno);
         }
     ;
 
+/* chamada consulta só a tabela de subprogramas: x() com x variável é erro */
 chamada
     : ID LPAREN RPAREN {
-            Symbol *s = use($1);
-            $$ = atr(cod_fmt("%s()", $1), s ? s->type : T_ERRO, yylineno);
+            Subprog *p = use_sub($1, yylineno);
+            $$ = atr(cod_fmt("%s()", $1), p ? p->ret : &type_erro, yylineno);
         }
     | ID LPAREN args RPAREN {
-            Symbol *s = use($1);
-            $$ = atr(cod_fmt("%s(%s)", $1, $3), s ? s->type : T_ERRO, yylineno);
+            Subprog *p = use_sub($1, yylineno);
+            $$ = atr(cod_fmt("%s(%s)", $1, $3), p ? p->ret : &type_erro, yylineno);
         }
     ;
 
@@ -222,7 +244,7 @@ while_stmt
 for_stmt
     : FOR LPAREN INT ID ASSIGN expr TO expr RPAREN  {
             scope_push_block(1);
-            declare($4, C_VAR, T_INT, 0);
+            declare_var($4, C_VAR, &type_int, 0, yylineno);
         } 
         corpo                                       { scope_pop(); }
     ;
@@ -273,46 +295,28 @@ fator
     ;
 
 literal
-    : LITERAL_INT  { $$ = atr($1, T_INT, yylineno); }
-    | TRUE         { $$ = atr(cod_fmt("1"), T_BOOL, yylineno); }  /* bool vira int no C */
-    | FALSE        { $$ = atr(cod_fmt("0"), T_BOOL, yylineno); }
+    : LITERAL_INT  { $$ = atr($1, &type_int, yylineno); }
+    | TRUE         { $$ = atr(cod_fmt("1"), &type_bool, yylineno); }  /* bool vira int no C */
+    | FALSE        { $$ = atr(cod_fmt("0"), &type_bool, yylineno); }
     ;
 
 %%
-
-static Symbol *declare(const char *name, Category category, Type type, int is_out) {
-    Scope *top = scope_level(scope_depth());
-    Symbol data = { .category = category, .type = type, .is_out = is_out, .line = yylineno };
-
-    Symbol *sym = table_insert(top->name, name, data);
-
-    if (!sym) {
-        erro_semantico(yylineno, "'%s' já declarado no escopo '%s'", name, top->name);
-    }
-    return sym;
-}
-
-/* Busca o nome na tabela; NULL (com erro reportado) se não declarado. */
-static Symbol *use(const char *name) {
-    Symbol *sym = find_name(name);
-    if (!sym) {
-        erro_semantico(yylineno, "'%s' não declarado", name);
-    }
-    return sym;
-}
 
 int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "-t") == 0) {
         yydebug = 1;
     }
 
-    scope_push("global", T_VOID, 0);
-    declare("ler", C_PROC, T_VOID, 0);
-    declare("escrever", C_PROC, T_VOID, 0);
+    type_init();
+    scope_push("global", NULL, 0);
+    declare_sub("ler", 0)->is_builtin = 1;
+    declare_sub("escrever", 0)->is_builtin = 1;
 
     int status = yyparse();
     scope_pop();
 
+    type_print();
+    sub_print();
     table_print();
 
     int erros = erros_semanticos();

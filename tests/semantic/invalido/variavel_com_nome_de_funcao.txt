@@ -1,0 +1,6 @@
+func juros(int p) -> int {
+    return p;
+}
+proc main() {
+    int juros := 1;
+}

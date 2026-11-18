@@ -3,70 +3,72 @@
 
 /**
  * @file symtab.h
- * @brief Definição da tabela de símbolos e funções relacionadas.
+ * @brief Tabela de símbolos (variáveis, constantes e parâmetros) e pilha de escopos.
  */
 
-/* Definição dos tipos de dados */
+#include "types.h"
 
-typedef enum { T_INT, T_FLOAT, T_BOOL, T_VOID, T_ERRO } Type;
-typedef enum { C_VAR, C_CONST, C_PARAM, C_PROC, C_FUNC, C_TYPE } Category;
+/* Declaração antecipada: Subprog é definido em subprog.h, que inclui este
+ * arquivo. Scope só guarda um ponteiro para ele, então isso basta e evita a
+ * inclusão circular. */
+struct Subprog;
 
+typedef enum { C_VAR, C_CONST, C_PARAM } Category;
 
 typedef struct Symbol {
-    char *key; // Chave do símbolo (nome#escopo)
     char *name, *scope;
     Category category;
-    Type type;
-    int array_size; // Tamanho do array, se aplicável, senão é 0
-    int is_out; // Indica se o parâmetro é de saída (out)
-    struct Symbol *params; // Lista de parâmetros, se aplicável para funções e procedimentos
-    struct Symbol *next; // Ponteiro para o próximo símbolo na lista encadeada
+    TypeDesc *type;             // Tipo (int, bool, int[10], registro...)
+    int is_out;                 // Indica se o parâmetro é de saída (out)
+    long value;                 // Constante: valor do literal (usado no tamanho de array)
     int line;
+    struct Symbol *next_param;  // Parâmetro: próximo na ordem da assinatura
 } Symbol;
 
 typedef struct {
     char *name;
-    Type type_return;
+    struct Subprog *owner;  // Subprograma dono do escopo; NULL no global
     int is_loop;
 } Scope;
+
 
 /**
  * @brief Adiciona um novo escopo à pilha de escopos.
  * @param name Nome do escopo.
- * @param type_return Tipo de retorno do escopo.
+ * @param owner Subprograma dono do escopo (NULL no global).
  * @param is_loop Indica se o escopo é um loop.
  */
-void scope_push(const char *name, Type type_return, int is_loop);
+void scope_push(const char *name, struct Subprog *owner, int is_loop);
 
 /**
- * @brief Adiciona um novo escopo de bloco à pilha de escopos.
+ * @brief Adiciona um escopo de bloco com nome único; herda o dono do topo e
+ *        continua marcado como loop se o topo já for loop.
  * @param is_loop Indica se o escopo é um loop.
  */
 void scope_push_block(int is_loop);
 
 /**
- * @brief Remove o último escopo da pilha de escopos; Não altera a tabela.
- * @return Null
+ * @brief Remove o último escopo da pilha de escopos; não altera a tabela.
  */
-void scope_pop(); 
+void scope_pop(void);
 
 /**
  * @brief Retorna o escopo na posição especificada (1 = global, ..., n = topo da pilha).
  * @param level Nível do escopo a ser retornado.
  * @return Ponteiro para o escopo na posição especificada, ou NULL se a posição for inválida.
  */
-Scope *scope_level(int level); 
+Scope *scope_level(int level);
 
 /**
  * @brief Retorna a profundidade da pilha de escopos.
  * @return Profundidade da pilha de escopos.
  */
-int scope_depth(); 
+int scope_depth(void);
 
 /* Definição da estrutura de tabela de símbolos */
 
 /**
- * @brief Insere um símbolo na tabela de símbolos.
+ * @brief Insere um símbolo na tabela de símbolos (chave "escopo#nome").
  * @param scope Nome do escopo onde o símbolo será inserido.
  * @param name Nome do símbolo.
  * @param data Dados do símbolo.
@@ -80,19 +82,18 @@ Symbol *table_insert(const char *scope, const char *name, Symbol data);
  * @param name Nome do símbolo.
  * @return Ponteiro para o símbolo encontrado, ou NULL se o símbolo não existir no escopo especificado.
  */
-Symbol *table_lookup(const char *scope, const char *name); 
+Symbol *table_lookup(const char *scope, const char *name);
 
 /**
- * @brief Procura um símbolo pelo nome em todos os escopos percorrendo toda a pilha de escopos.
+ * @brief Procura um símbolo pelo nome percorrendo a pilha de escopos, do topo até o global.
  * @param name Nome do símbolo.
- * @return Ponteiro para o símbolo encontrado, ou NULL se o símbolo não existir em nenhum escopo.
+ * @return Ponteiro para o símbolo visível mais interno, ou NULL se não estiver visível.
  */
 Symbol *find_name(const char *name);
 
 /**
- * @brief Imprime a tabela de símbolos.
- * @return Null
+ * @brief Imprime a tabela de símbolos, na ordem de declaração.
  */
-void table_print();
+void table_print(void);
 
 #endif

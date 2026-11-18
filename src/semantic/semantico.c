@@ -6,15 +6,15 @@
 /* Contador de erros semânticos; define o código de saída do compilador. */
 static int total_erros = 0;
 
-Atr atr(char *cod, Type tipo, int linha) {
+Atr atr(char *cod, TypeDesc *tipo, int linha) {
     Atr a = { cod, tipo, linha };
     return a;
 }
 
-Type tipo_resultado(Op op, Type a, Type b) {
-    if (a == T_ERRO || b == T_ERRO) return T_ERRO;  /* sem cascata de erros */
-    if (op == OP_ARITMETICO) return (a == T_FLOAT || b == T_FLOAT) ? T_FLOAT : T_INT;
-    return T_BOOL;  /* relacional e lógico */
+TypeDesc *tipo_resultado(Op op, TypeDesc *a, TypeDesc *b) {
+    if (a->kind == K_ERRO || b->kind == K_ERRO) return &type_erro;  /* sem cascata de erros */
+    if (op == OP_ARITMETICO) return (a->kind == K_FLOAT || b->kind == K_FLOAT) ? &type_float : &type_int;
+    return &type_bool;  /* relacional e lógico */
 }
 
 /* Formata fmt/ap em memória nova; encerra o programa se faltar memória. */
@@ -61,4 +61,81 @@ void erro_semantico(int linha, const char *fmt, ...) {
 
 int erros_semanticos(void) {
     return total_erros;
+}
+
+int nome_livre(const char *nome, int linha) {
+    Symbol *sym = find_name(nome);  /* escopo atual e todos os envolventes */
+    if (sym) {
+        erro_semantico(linha, "'%s' já declarado no escopo '%s'", nome, sym->scope);
+        return 0;
+    }
+    if (sub_lookup(nome)) {
+        erro_semantico(linha, "'%s' já é o nome de um subprograma", nome);
+        return 0;
+    }
+    if (type_lookup(nome)) {
+        erro_semantico(linha, "'%s' já é o nome de um tipo", nome);
+        return 0;
+    }
+    return 1;
+}
+
+Symbol *declare_var(const char *name, Category category, TypeDesc *type, int is_out, int line) {
+    if (!nome_livre(name, line)) {
+        return NULL;
+    }
+
+    Scope *top = scope_level(scope_depth());
+    Symbol data = { .category = category, .type = type, .is_out = is_out, .line = line };
+
+    return table_insert(top->name, name, data);  /* não falha: nome_livre já olhou o topo */
+}
+
+Symbol *use_var(const char *name, int line) {
+    Symbol *sym = find_name(name);
+
+    if (!sym) {
+        if (sub_lookup(name)) {
+            erro_semantico(line, "'%s' é um subprograma, não uma variável", name);
+        } else {
+            erro_semantico(line, "'%s' não declarado", name);
+        }
+    }
+    return sym;
+}
+
+Subprog *declare_sub(const char *name, int line) {
+    if (!nome_livre(name, line)) {
+        return NULL;
+    }
+
+    return sub_insert(name, (Subprog){ .ret = &type_void, .line = line });
+}
+
+Subprog *use_sub(const char *name, int line) {
+    Subprog *sub = sub_lookup(name);
+
+    if (!sub) {
+        if (find_name(name)) {
+            erro_semantico(line, "'%s' não é um subprograma", name);
+        } else {
+            erro_semantico(line, "subprograma '%s' não declarado", name);
+        }
+    }
+    return sub;
+}
+
+void append_param(Subprog *sub, Symbol *param) {
+    if (!sub || !param) {
+        return;
+    }
+
+    Symbol **next_param_ptr = &sub->params;
+
+    while (*next_param_ptr) {
+        next_param_ptr = &(*next_param_ptr)->next_param;
+    }
+
+    *next_param_ptr = param;
+    sub->n_params++;
 }

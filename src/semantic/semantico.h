@@ -1,7 +1,9 @@
 #ifndef SEMANTICO_H
 #define SEMANTICO_H
 
-#include "semantic/symtab.h"  /* define Type (T_INT..T_ERRO); T_ERRO propaga em silêncio */
+#include "semantic/types.h"    /* TypeDesc; &type_erro propaga em silêncio */
+#include "semantic/symtab.h"
+#include "semantic/subprog.h"
 
 /* Categoria do operador, usada para decidir o tipo do resultado. */
 typedef enum { OP_ARITMETICO, OP_RELACIONAL, OP_LOGICO } Op;
@@ -9,12 +11,12 @@ typedef enum { OP_ARITMETICO, OP_RELACIONAL, OP_LOGICO } Op;
 /* Atributo sintetizado de uma expressão: texto C, tipo e linha de origem. */
 typedef struct {
     char *cod;
-    Type tipo;
+    TypeDesc *tipo;
     int linha;
 } Atr;
 
 /* Monta um atributo a partir de seus três componentes. */
-Atr atr(char *cod, Type tipo, int linha);
+Atr atr(char *cod, TypeDesc *tipo, int linha);
 
 /* Operação binária: cod "a op b", tipo por tipo_resultado, linha de a. */
 Atr atr_bin(Atr a, const char *op_c, Atr b, Op op);
@@ -23,7 +25,7 @@ Atr atr_bin(Atr a, const char *op_c, Atr b, Op op);
 Atr atr_un(const char *op_c, Atr a, Op op);
 
 /* Tipo resultante de um operador (sem checar compatibilidade; isso é a #9). */
-Type tipo_resultado(Op op, Type a, Type b);
+TypeDesc *tipo_resultado(Op op, TypeDesc *a, TypeDesc *b);
 
 /* printf que devolve texto C em memória recém-alocada. */
 char *cod_fmt(const char *fmt, ...);
@@ -33,5 +35,26 @@ void erro_semantico(int linha, const char *fmt, ...);
 
 /* Quantidade de erros semânticos reportados até agora. */
 int erros_semanticos(void);
+
+/* ---------- Declarações e usos de nomes (consultam as três tabelas) ---------- */
+
+/* 1 se o nome pode ser declarado agora: não é símbolo visível (sem shadowing),
+ * nem subprograma, nem tipo. Se não puder, reporta o erro e devolve 0. */
+int nome_livre(const char *nome, int linha);
+
+/* Declara variável, constante ou parâmetro no escopo do topo; NULL se o nome não estiver livre. */
+Symbol *declare_var(const char *name, Category category, TypeDesc *type, int is_out, int line);
+
+/* Símbolo visível com esse nome; NULL (com erro reportado) se não houver. */
+Symbol *use_var(const char *name, int line);
+
+/* Declara um subprograma (começa como proc; a regra de func ajusta is_func e ret). */
+Subprog *declare_sub(const char *name, int line);
+
+/* Subprograma com esse nome; NULL (com erro reportado) se não houver. */
+Subprog *use_sub(const char *name, int line);
+
+/* Acrescenta o parâmetro ao fim da lista do subprograma e conta n_params. */
+void append_param(Subprog *sub, Symbol *param);
 
 #endif
