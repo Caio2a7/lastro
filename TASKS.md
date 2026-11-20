@@ -16,16 +16,16 @@ Em `src/lexer/lexer.l:70`, voltar o `return ERRO`. Hoje um programa com `@` sai 
 Na `%union`, guardar (código C, tipo) e declarar os `%type`. Criar `erro_semantico(linha, msg)`, que conta o erro sem abortar.\
 Área: sintático.
 
-**[#5](https://github.com/Caio2a7/lastro/issues/5) Implementar a tabela de símbolos**\
-Tabela de símbolos (symbol table): hash com chave `escopo#nome`, `insert` que acusa duplicata e `lookup`. O símbolo guarda nome, categoria, tipo, se é `out` e os parâmetros. A entrada não é apagada no `pop`.\
+**[#5](https://github.com/Caio2a7/lastro/issues/5) Implementar as tabelas de símbolos, de subprogramas e de tipos**\
+Três tabelas sobre uma tabela hash genérica: símbolos (chave `escopo#nome`), subprogramas (chave `nome`, com retorno e parâmetros em ordem) e tipos (chave `nome`, descritor `TypeDesc`). `insert` acusa duplicata e `lookup` devolve NULL se não achar. As entradas não são apagadas no `pop`.\
 Área: semântico.
 
 **[#6](https://github.com/Caio2a7/lastro/issues/6) Implementar a pilha de escopos**\
-Pilha de escopos (scope stack): cada nível guarda (escopo, tipo de retorno) e qualquer nível pode ser lido. Cada bloco recebe um nome único (`main#b2`).\
+Pilha de escopos (scope stack): cada nível guarda (escopo, subprograma dono, se é laço) e qualquer nível pode ser lido. Cada bloco recebe um nome único (`main#block2`).\
 Área: semântico.
 
 **[#7](https://github.com/Caio2a7/lastro/issues/7) Abrir e fechar escopos na gramática**\
-Cabeçalhos `cab_proc`/`cab_func` registram o subprograma antes do corpo (assim a recursão funciona) e inserem os parâmetros; `push`/`pop` em bloco e no `for`; variável de bloco interno pode esconder uma de fora (shadowing); `ler`/`escrever` registrados como embutidos.\
+`nome_sub` registra o subprograma antes do corpo (assim a recursão funciona) e insere os parâmetros; `push`/`pop` em bloco e no `for`; sem shadowing (decidido em #1); `ler`/`escrever` registrados como embutidos.\
 Área: sintático, semântico. Critério: 2C, 2D.
 
 **[#8](https://github.com/Caio2a7/lastro/issues/8) Verificar as declarações**\

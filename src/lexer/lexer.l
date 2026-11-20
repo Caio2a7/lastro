@@ -66,7 +66,9 @@ ident    {letra}({letra}|{digito}|_)*
 "."           { return DOT; }
 
 {digito}+     { yylval.str = strdup(yytext); return LITERAL_INT; }
-{ident}       { yylval.str = strdup(yytext); return ID; }
+  /* Nome que já é tipo vira TYPE_ID; sem isso, "Conta[10] c" e "v[i] := ..."
+     ficariam ambíguos para o parser. As palavras reservadas casam antes desta regra. */
+{ident}       { yylval.str = strdup(yytext); return type_lookup(yytext) ? TYPE_ID : ID; }
 
 .             { yyerror("caractere inválido"); return ERRO; }
 
